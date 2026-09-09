@@ -1,0 +1,60 @@
+version: 2
+
+sources:
+  - name: tcgcsv
+    description: >
+      Public mirror of TCGplayer catalog and pricing data, filtered to Pokemon
+      (categoryId 3) and landed as parquet by extract/fetch_tcgcsv.py. Nothing in
+      this source is authored by this project; it is a raw copy of what the mirror
+      served on the day it was pulled.
+
+    tables:
+      - name: prices
+        description: >
+          One row per product per printing per day. Hive-partitioned on price_date.
+          This is the only table that grows daily.
+        meta:
+          external_location: "read_parquet('{{ var('landing_dir') }}/prices/**/*.parquet', hive_partitioning = true, union_by_name = true)"
+        loaded_at_field: "cast(price_date as timestamp)"
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 5, period: day}
+        columns:
+          - name: productId
+            tests:
+              - not_null
+          - name: subTypeName
+            description: Printing variant. Normal, Holofoil, Reverse Holofoil, 1st Edition Holofoil.
+            tests:
+              - not_null
+
+      - name: products
+        description: One row per TCGplayer product. Includes sealed product, not just single cards.
+        meta:
+          external_location: "read_parquet('{{ var('landing_dir') }}/products/*.parquet')"
+        columns:
+          - name: productId
+            tests:
+              - unique
+              - not_null
+
+      - name: product_attributes
+        description: >
+          Long-format flattening of each product's extendedData block. One row per
+          product per attribute. Pivoted into columns in stg_tcgcsv_products.
+        meta:
+          external_location: "read_parquet('{{ var('landing_dir') }}/product_attributes/*.parquet')"
+        columns:
+          - name: productId
+            tests:
+              - not_null
+
+      - name: groups
+        description: One row per TCGplayer group, which corresponds to a Pokemon set.
+        meta:
+          external_location: "read_parquet('{{ var('landing_dir') }}/groups/*.parquet')"
+        columns:
+          - name: groupId
+            tests:
+              - unique
+              - not_null

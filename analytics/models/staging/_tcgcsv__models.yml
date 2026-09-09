@@ -1,0 +1,70 @@
+version: 2
+
+models:
+  - name: stg_tcgcsv_prices
+    description: >
+      Daily price snapshots, renamed and typed. Grain is one row per product per
+      printing per day. price_date comes from the hive partition, not from the
+      source payload, because TCGCSV price records carry no date of their own.
+    columns:
+      - name: card_printing_key
+        description: >
+          Surrogate key over (product_id, printing_type). This is the entity that
+          actually has a price series. A single card can carry three of them.
+        tests:
+          - not_null
+      - name: price_date
+        tests:
+          - not_null
+      - name: market_price
+        description: >
+          TCGplayer's market price. Nullable, and frequently null for products with
+          no recent sales. Nulls are preserved rather than zero-filled so that
+          "no sales" and "sold for nothing" stay distinguishable.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - product_id
+            - printing_type
+            - price_date
+
+  - name: stg_tcgcsv_products
+    description: >
+      One row per TCGplayer product, with extendedData pivoted into columns.
+      Includes sealed product, which must be excluded from card-level analysis.
+    columns:
+      - name: product_id
+        tests:
+          - unique
+          - not_null
+      - name: group_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_tcgcsv_groups')
+              field: set_id
+      - name: rarity
+        description: TCGplayer's rarity string. Free text, not a controlled vocabulary.
+      - name: is_sealed_product
+        description: Derived heuristic. See the model SQL for the rule.
+        tests:
+          - not_null
+
+  - name: stg_tcgcsv_groups
+    description: One row per Pokemon set.
+    columns:
+      - name: set_id
+        tests:
+          - unique
+          - not_null
+      - name: set_name
+        tests:
+          - not_null
+      - name: set_published_date
+        description: >
+          Set release date. This is the anchor for days-since-release cohort
+          analysis, so a null here silently drops a whole set from that mart.
+        tests:
+          - not_null:
+              config:
+                severity: warn
