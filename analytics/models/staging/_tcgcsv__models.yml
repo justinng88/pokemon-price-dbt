@@ -23,10 +23,11 @@ models:
           "no sales" and "sold for nothing" stay distinguishable.
     tests:
       - dbt_utils.unique_combination_of_columns:
-          combination_of_columns:
-            - product_id
-            - printing_type
-            - price_date
+          arguments:
+            combination_of_columns:
+              - product_id
+              - printing_type
+              - price_date
 
   - name: stg_tcgcsv_products
     description: >
@@ -41,8 +42,9 @@ models:
         tests:
           - not_null
           - relationships:
-              to: ref('stg_tcgcsv_groups')
-              field: set_id
+              arguments:
+                to: ref('stg_tcgcsv_groups')
+                field: set_id
       - name: rarity
         description: TCGplayer's rarity string. Free text, not a controlled vocabulary.
       - name: is_sealed_product
