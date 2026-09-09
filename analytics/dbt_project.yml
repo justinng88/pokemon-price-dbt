@@ -23,3 +23,14 @@ models:
     marts:
       +materialized: table
       +schema: marts
+
+seeds:
+  pokemon_price:
+    set_release_date_overrides:
+      +column_types:
+        set_id: integer
+        set_release_date: date
+        is_cohort_eligible: boolean
+        set_name: varchar
+        notes: varchar
+        source_url: varchar
