@@ -8,3 +8,5 @@ analytics/dbt_packages/
 analytics/logs/
 .env
 .DS_Store
+
+scratch.sql
