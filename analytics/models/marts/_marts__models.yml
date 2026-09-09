@@ -1,0 +1,75 @@
+version: 2
+
+models:
+  - name: dim_card_printing
+    description: >
+      One row per single card per printing. Sealed product excluded. The
+      dimension for all card-level price analysis.
+    columns:
+      - name: card_printing_key
+        tests:
+          - unique
+          - not_null
+      - name: printing_type
+        tests:
+          - not_null
+      - name: set_release_date
+        description: >
+          Sourced release date, overridden from the seed where TCGplayer's
+          publishedOn was unreliable. Null for sets with no release event.
+          
+  - name: fct_price_metrics
+    description: >
+      Daily price series with derived movement metrics, restricted to
+      analysis-eligible, post-release, priced rows. Moving averages are over
+      observations, not calendar days, because cards are not priced every day.
+    columns:
+      - name: card_printing_key
+        tests:
+          - not_null
+      - name: price_date
+        tests:
+          - not_null
+      - name: pct_change_1d
+        description: Null on a series' first observation, and where the prior price was zero.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: -99
+                max_value: 1000
+                row_condition: "pct_change_1d is not null and prev_day_price >= 1.00"
+              config:
+                severity: warn
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - card_printing_key
+              - price_date
+
+  - name: fct_card_price_daily
+    description: >
+      One row per card printing per day. Grain enforced below. Restricted to
+      single cards; carries flags for presale rows and cohort-ineligible sets so
+      downstream analysis can exclude them explicitly rather than by accident.
+    columns:
+      - name: card_printing_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_card_printing')
+                field: card_printing_key
+      - name: price_date
+        tests:
+          - not_null
+      - name: is_presale
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - card_printing_key
+              - price_date
+              
