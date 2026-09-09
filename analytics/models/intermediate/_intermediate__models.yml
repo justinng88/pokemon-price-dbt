@@ -1,0 +1,49 @@
+﻿version: 2
+
+models:
+  - name: int_card_printings
+    description: >
+      One row per product per printing, with card and set attributes attached.
+      Row set derived from distinct printings observed in the price feed, because
+      the product catalog does not record which printings exist.
+    columns:
+      - name: card_printing_key
+        tests:
+          - unique
+          - not_null
+      - name: product_id
+        tests:
+          - not_null
+      - name: printing_type
+        tests:
+          - not_null
+      - name: set_published_date
+        tests:
+          - not_null:
+              config:
+                severity: warn
+
+  - name: int_price_snapshots
+    description: >
+      One row per printing per day, joined to card attributes. Carries
+      days_since_set_release so cohort analysis is a group-by, not a join.
+    columns:
+      - name: card_printing_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('int_card_printings')
+                field: card_printing_key
+      - name: price_date
+        tests:
+          - not_null
+      - name: has_market_price
+        tests:
+          - not_null
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - card_printing_key
+              - price_date
