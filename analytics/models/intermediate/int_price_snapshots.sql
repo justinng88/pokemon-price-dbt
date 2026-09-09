@@ -11,7 +11,8 @@ printings as (
     select
         card_printing_key,
         is_sealed_product,
-        set_published_date
+        set_release_date,
+        is_set_cohort_eligible
     from {{ ref('int_card_printings') }}
 
 )
@@ -29,8 +30,9 @@ select
     prices.direct_low_price,
 
     printings.is_sealed_product,
+    printings.is_set_cohort_eligible,
 
-    date_diff('day', printings.set_published_date, prices.price_date)
+    date_diff('day', printings.set_release_date, prices.price_date)
         as days_since_set_release,
 
     prices.market_price is not null as has_market_price

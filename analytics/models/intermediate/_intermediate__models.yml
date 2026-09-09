@@ -17,7 +17,7 @@ models:
       - name: printing_type
         tests:
           - not_null
-      - name: set_published_date
+      - name: set_release_date
         tests:
           - not_null:
               config:

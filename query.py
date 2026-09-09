@@ -39,4 +39,9 @@ else:
 os.chdir(Path(__file__).parent / "analytics")
 
 con = duckdb.connect("../dev.duckdb", read_only=True)
-con.sql(sql).show(max_rows=50)
+
+result = con.sql(sql)
+if result is not None:
+    result.show(max_rows=50)
+else:
+    print("Statement executed; no rows returned.")
