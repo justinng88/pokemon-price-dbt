@@ -1,4 +1,8 @@
-{{ config(materialized='table') }}
+{{ config(
+    materialized='incremental',
+    unique_key=['card_printing_key', 'price_date'],
+    incremental_strategy='delete+insert'
+) }}
 
 with snapshots as (
 
@@ -34,3 +38,6 @@ from snapshots
 
 inner join printings
     on snapshots.card_printing_key = printings.card_printing_key
+{% if is_incremental() %}
+where snapshots.price_date > (select max(price_date) from {{ this }})
+{% endif %}

@@ -17,6 +17,16 @@ models:
       - name: printing_type
         tests:
           - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - Normal
+                  - Reverse Holofoil
+                  - Holofoil
+                  - 1st Edition
+                  - Unlimited
+                  - 1st Edition Holofoil
+                  - Unlimited Holofoil
       - name: set_release_date
         tests:
           - not_null:

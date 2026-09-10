@@ -40,6 +40,17 @@ models:
                 row_condition: "pct_change_1d is not null and prev_day_price >= 1.00"
               config:
                 severity: warn
+      - name: pct_change_7d
+        description: >
+          Null where the seven-observation lag does not span exactly seven days.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: -99
+                max_value: 2000
+                row_condition: "pct_change_7d is not null and prev_week_price >= 1.00"
+              config:
+                severity: warn
     tests:
       - dbt_utils.unique_combination_of_columns:
           arguments:

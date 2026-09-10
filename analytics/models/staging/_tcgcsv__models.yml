@@ -64,8 +64,10 @@ models:
           - not_null
       - name: set_published_date
         description: >
-          Set release date. This is the anchor for days-since-release cohort
-          analysis, so a null here silently drops a whole set from that mart.
+          TCGplayer's publishedOn. A genuine release date for 201 of 220 sets, but
+          19 carry the catalog extract date instead. Corrected downstream by the
+          set_release_date_overrides seed — do not use this field directly for
+          cohort analysis. See DECISIONS 009.
         tests:
           - not_null:
               config:

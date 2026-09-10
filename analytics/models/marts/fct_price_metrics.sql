@@ -54,6 +54,7 @@ windowed as (
         ) as observation_number,
 
         lag(price_date, 1) over w as prev_observation_date,
+        lag(price_date, 7) over w as prev_week_observation_date,
 
     from base
     window w as (partition by card_printing_key order by price_date)
@@ -84,6 +85,7 @@ select
 
     case
         when prev_week_price is null or prev_week_price = 0 then null
+        when date_diff('day', prev_week_observation_date, price_date) <> 7 then null
         else round(100.0 * (market_price - prev_week_price) / prev_week_price, 4)
     end as pct_change_7d,
 
