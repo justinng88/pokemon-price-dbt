@@ -148,3 +148,44 @@ Longest session so far. Went from nothing installed to a working warehouse with
 - One-pagers for the three marts.
 - Phase 6 enrichment and the reconciliation model (DECISIONS 005).
 - GitHub Action running `dbt build` on pull requests.
+
+## 2026-09-10 — Backfill complete; earlier diagnosis partly overturned
+
+**Data**
+- Backfill finished. Complete daily coverage 2024-02-08 to 2026-09-07, ~945 days,
+  no gaps. Month-level check confirms every month full; 2024-02 shows 22 days
+  because archives begin on the 8th.
+
+**Changed**
+- Full `dbt build` against complete data: 51 tests pass, 1 warn, 0 errors.
+- DECISIONS 011 revised — see below.
+- `fct_price_metrics` one-pager updated with corrected reasoning on
+  `is_move_material`.
+
+**Questions answered**
+- Bounds test warnings fell from 191 to 58 once the seam closed, confirming the
+  window-function fix addressed the dominant cause.
+- The residual 58 are scattered, maximum 4 on any single date. Genuine heavy tail,
+  not a defect.
+
+**Surprises**
+- *The penny-card diagnosis was mostly wrong, and it had been made confidently.*
+  Re-measuring extreme move rates by prior price band against complete data showed
+  only a threefold difference between sub-$0.50 and $5+ cards, not the order of
+  magnitude assumed. The spikes had been overwhelmingly seam artifact; price level
+  was a secondary factor that the seam amplified. The `is_move_material` flag is
+  retained but its documented justification was rewritten.
+
+  The general lesson is the one worth keeping: a plausible explanation measured
+  against a dataset with a known hole in it is a hypothesis, not a finding. The
+  original analysis was internally consistent and wrong.
+
+- *Build time scaled worse than expected.* 10 seconds over 12.2M rows became
+  3 minutes 51 seconds over the full dataset, because staging models are views
+  re-scanning every parquet partition on each downstream query. This is the
+  trigger condition recorded in DECISIONS 006.
+
+**Open questions**
+- `pct_change_7d` still uses `lag(..., 7)` and carries the rows-versus-days flaw.
+- Whether to lower the materiality floor to $0.50 or retain $1.00. Retained for
+  now with corrected documentation.

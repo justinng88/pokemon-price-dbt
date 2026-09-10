@@ -297,3 +297,66 @@ Two follow-ups:
 Moving averages (`moving_avg_7d`, `moving_avg_30d`) deliberately remain
 observation-based rather than calendar-based. Given 0.015% genuine sparsity the
 two are near-identical here, but the choice is a choice and is recorded as one.
+
+
+**Revised 2026-09-10 — the penny-card diagnosis was mostly wrong.**
+
+The original entry attributed 572 upward spikes to penny-card relisting noise and
+introduced a $1.00 materiality floor on that basis. Re-measured against the
+complete backfill, that attribution does not hold.
+
+Extreme daily moves (|pct_change_1d| > 1000) by prior price band, over ~34.7M
+rows with a defined daily change:
+
+| Prior price | Rows | Extreme | Rate per 100k |
+|---|---|---|---|
+| under $0.50 | 15,094,705 | 175 | 1.16 |
+| $0.50–$1.00 | 4,170,370 | 24 | 0.58 |
+| $1.00–$5.00 | 7,681,437 | 17 | 0.22 |
+| $5.00+ | 7,731,532 | 32 | 0.41 |
+
+Cheap cards are noisier, but only by roughly threefold — not the order of
+magnitude the original entry implied. The 572 spikes were overwhelmingly an
+artifact of the backfill seam, where `lag()` compared cards against observations
+up to eight months old. Price level was a secondary contributor that the seam made
+look primary, because thin cards drift proportionally further over eight months
+than liquid ones do.
+
+**What this changes.** `is_move_material` is retained at the $1.00 threshold, but
+it is a mild noise filter rather than the load-bearing correction the original
+entry described. Analysts doing movement work should still use it; they should not
+believe that excluding sub-$1 cards removes most extreme moves. It does not.
+
+**What it does not change.** The window-function fix (null across non-consecutive
+observations) was correct and remains the substantive part of this entry. It was
+the actual cause.
+
+**Residual after both fixes.** 58 warnings against the complete dataset, scattered
+across dates with a maximum of 4 on any single day. That is a genuine heavy tail —
+0.00017% of rows — not a defect. The bounds test stays at `warn` severity for
+exactly this reason: it should prompt a look, not block a build.
+
+**Method note.** The original diagnosis was made against a dataset with a known
+14-month hole, and it was made confidently. Re-measuring after the hole closed
+overturned it. Worth remembering that a plausible explanation measured against
+incomplete data is a hypothesis, not a finding.
+
+**Measured 2026-09-10.** The reasoning in this entry was directionally correct and
+the stated mechanism was backwards.
+
+Across cards carrying both printings, Reverse Holofoil trades at a median 2.74x
+Normal for base-tier cards (n=9,283) and 2.01x for rares (n=1,946). The original
+text warned that reverse holos would "drag down every rarity-level average." They
+would do the opposite — they are the more expensive printing, and product-level
+aggregation would inflate base-tier medians rather than depress them.
+
+The conclusion stands and is now quantified: product-level aggregation blends
+populations differing by nearly threefold, with a blend ratio varying by set
+according to reverse-holo composition. The decision was right; the explanation
+for why was wrong, and is corrected here rather than edited above.
+
+Printing types observed across the full catalog, confirming the `accepted_values`
+list was complete: Normal (17,357), Reverse Holofoil (13,798), Holofoil (10,766),
+1st Edition (762), Unlimited (761), 1st Edition Holofoil (183), Unlimited Holofoil
+(179). That test is now `error` rather than `warn` — a new printing type appearing
+upstream should stop the build.

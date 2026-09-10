@@ -70,5 +70,17 @@ over 12.2M rows *(as of 2026-09-09)*.
 | `dbt_expectations.expect_column_values_to_be_between` on `pct_change_1d`, -99 to 1000, scoped to material moves, severity `warn` | Implausible daily moves. **This test found a real bug** — see DECISIONS 011. It is warn rather than error because a heavy-tailed price distribution legitimately produces a handful of extreme moves. |
 | `not_null` on `card_printing_key`, `price_date` | Broken keys from the upstream join |
 
+**`is_move_material` gates on prior price ≥ $1.00.** A card at $0.05 relisting at
+$18 is a +36,000% change that is arithmetically correct and analytically
+meaningless, so movement analysis should filter on this flag.
+
+Measured against the complete backfill, however, the effect is modest: extreme
+daily moves occur at 1.16 per 100k rows below $0.50 versus 0.41 per 100k above
+$5.00 — roughly threefold, not an order of magnitude. Do not assume this flag
+removes most extreme moves. It removes some. The larger source of spurious
+movement was the backfill seam, fixed separately. See DECISIONS 011, revised
+2026-09-10.
+
 ## Owner and last reviewed
 Justin Ng / 2026-09-09
+

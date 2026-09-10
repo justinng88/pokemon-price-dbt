@@ -61,12 +61,36 @@ piece of work.
 ## Grain: the decision everything else rests on
 
 **Prices are per product per printing, not per card.** A card issued in Normal,
-Holofoil and Reverse Holofoil has three independent price series that diverge
-substantially. The fact grain is `(product_id, printing_type, price_date)`, keyed
-by a surrogate `card_printing_key`.
+Holofoil and Reverse Holofoil has three independent price series. The fact grain
+is `(product_id, printing_type, price_date)`, keyed by a surrogate
+`card_printing_key`.
 
-Aggregating to the product level would let reverse holos silently drag down every
-rarity-level average. Enforced by uniqueness tests at both staging and mart.
+This was the first architectural decision in the project, and it turned out to be
+the one with the largest measured consequence:
+
+| Tier | Cards with both printings | Median Reverse Holofoil ÷ Normal |
+|---|---|---|
+| Base | 9,283 | **2.74x** |
+| Rare | 1,946 | **2.01x** |
+
+Reverse holofoils trade at roughly **two to three times** their normal
+counterparts — the opposite of the intuition that the plain printing is the
+baseline and the variant is a curiosity. Reverse holos are printed at about one
+per pack against a far larger normal print run for commons, so relative scarcity
+inverts the expected ordering.
+
+The practical consequence: aggregating prices to the product level would blend two
+populations differing by nearly threefold, and the blend ratio would shift set by
+set depending on how many reverse holos exist in each. A "median price by rarity"
+chart built on product-level data would move for reasons that have nothing to do
+with the market.
+
+Enforced by `unique_combination_of_columns` tests at both staging and mart, and by
+an `accepted_values` test on `printing_type` so a new variant from upstream fails
+the build rather than silently creating a new slice.
+
+*Promo and ultra tiers are omitted from the table above: only two and one cards
+respectively carry both printings, which is too few to report.*
 
 ---
 
