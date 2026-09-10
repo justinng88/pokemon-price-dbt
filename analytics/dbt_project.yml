@@ -16,7 +16,7 @@ vars:
 models:
   pokemon_price:
     staging:
-      +materialized: view
+      +materialized: table
       +schema: staging
     intermediate:
       +materialized: ephemeral

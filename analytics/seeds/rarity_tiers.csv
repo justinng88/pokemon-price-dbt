@@ -1,25 +1,25 @@
 rarity,card_count,rarity_tier,is_analysis_eligible
-Common,12281,base,true
-Uncommon,11428,base,true
-Rare,5979,rare,true
-Promo,3834,promo,true
-Holo Rare,3428,rare,true
-Ultra Rare,2588,ultra,true
-Code Card,1091,excluded,false
-Secret Rare,625,chase,true
-Double Rare,504,ultra,true
+Common,12364,base,true
+Uncommon,11491,base,true
+Rare,6029,rare,true
+Promo,3870,promo,true
+Holo Rare,3435,rare,true
+Ultra Rare,2602,ultra,true
+Code Card,1117,excluded,false
+Secret Rare,627,chase,true
+Double Rare,523,ultra,true
 Illustration Rare,499,chase,true
 Shiny Holo Rare,246,rare,true
 Special Illustration Rare,224,chase,true
 Classic Collection,132,chase,true
-None,129,excluded,false
+None,130,excluded,false
 Shiny Rare,120,rare,true
 Hyper Rare,74,chase,true
 Unconfirmed,66,excluded,false
-ACE SPEC Rare,62,ultra,true
+ACE SPEC Rare,65,ultra,true
 Rainbow Rare,36,chase,true
+Radiant Rare,35,ultra,true
 Prism Rare,33,ultra,true
-Radiant Rare,32,ultra,true
 Rare BREAK,28,rare,true
 Rare Ace,14,ultra,true
 Shiny Ultra Rare,13,ultra,true
