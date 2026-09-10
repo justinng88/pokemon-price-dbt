@@ -168,6 +168,56 @@ cd analytics && dbt deps && dbt build
 Full instructions, troubleshooting and the build roadmap are in
 [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
+## Scheduling
+
+`daily_run.ps1` runs the pipeline end to end: activate the environment, pull new
+price data, rebuild the warehouse, check source freshness. It writes a dated log
+to `logs/` and exits non-zero on failure so Windows Task Scheduler surfaces the
+problem in its Last Run Result column.
+
+```powershell
+.\daily_run.ps1        # manual
+```
+
+Scheduled daily via Task Scheduler with `-ExecutionPolicy Bypass -File`, set to
+run whether logged on or not, and to catch up if a scheduled start is missed.
+
+Three details in the script are worth explaining, because each one exists to
+prevent a specific silent failure.
+
+**It pulls a three-day window, not just today.** TCGCSV publishes on a lag, and
+the extract skips partitions that already exist. A missed run therefore heals
+itself on the next execution rather than leaving a permanent hole. This matters
+because a single missing day breaks `pct_change_1d` for every card in the
+warehouse — the metric is defined only across consecutive observations, so a gap
+nulls a whole day of movement rather than merely shifting it.
+
+**It treats dbt exit code 2 as success.** dbt returns 1 for errors and 2 for
+warnings-only. The bounds tests on `pct_change_1d` and `pct_change_7d` fire on a
+small genuine tail every run by design, so a script that failed on warnings would
+report failure daily and stop being read.
+
+**It runs a full `dbt build` with no selector.** Staging is materialized as a
+table, so a narrower selector would leave the fact model reading a stale staging
+snapshot, find no dates past its current maximum, and insert nothing — with no
+error and output identical to "no new data." See DECISIONS 006.
+
+### Constraint
+
+This is local scheduling. The pipeline runs when the machine is on.
+
+Cloud scheduling would require more than a workflow file: the warehouse is a local
+DuckDB file, and a GitHub Actions runner's filesystem is discarded when the job
+ends. Running this in CI would mean moving to a hosted warehouse — MotherDuck, or
+a cloud warehouse with the parquet landing zone in object storage. That is an
+architecture change rather than a scheduling one, and it is not justified for a
+project whose analysis is historical: whether the warehouse is current to
+yesterday or to last month does not change any finding here.
+
+Source freshness checks run on every execution regardless, which is the half of
+automation that actually matters. Knowing when data stopped arriving is more
+valuable than the arrival being unattended.
+
 ## Documentation
 
 - [`docs/DECISIONS.md`](docs/DECISIONS.md) — every non-obvious choice and why
@@ -175,3 +225,4 @@ Full instructions, troubleshooting and the build roadmap are in
   surprising
 - [`docs/one-pagers/`](docs/one-pagers/) — per-table grain, sourcing,
   dimensionality, limitations
+

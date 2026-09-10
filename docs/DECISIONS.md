@@ -131,6 +131,43 @@ is safe and a failed backfill can be resumed.
 so the repo stays small. `price_date` is carried by the partition path rather than
 the payload, because TCGCSV price records contain no date field of their own.
 
+**Materialization change, 2026-09-10.** Staging models moved from `view` to
+`table`, and `fct_card_price_daily` from `table` to `incremental`.
+
+*Why.* At ~35M rows, staging views re-scanned every parquet partition on each
+downstream query. A full `dbt build` took 3m51s and every ad-hoc query paid the
+same scan cost. Materializing staging brought the build to seconds. This is the
+trigger condition recorded above — build time became annoying, not a date on a
+calendar.
+
+*What it cost.* Two things, both worth stating plainly.
+
+The relative-path fragility above disappeared, which was the intended side
+benefit: a table holds real data, so nothing resolves `../landing` at query time.
+
+But it introduced a staleness failure mode that views did not have. A staging
+table holds a snapshot from its last build and does not see new parquet until it
+rebuilds. Running `dbt build --select fct_card_price_daily` after landing a new
+day now silently does nothing — the fact reads stale staging, finds no dates past
+its current maximum, and inserts zero rows. There is no error. It looks exactly
+like "no new data."
+
+*Operational consequence.* The daily run must be a full `dbt build` with no
+selector, or `--select stg_tcgcsv_prices+` at minimum. Recorded in the RUNBOOK.
+Narrower selectors are for iterating on a model whose upstream is known current.
+
+*Incremental configuration.* `unique_key=['card_printing_key', 'price_date']`
+with `incremental_strategy='delete+insert'`, filtered on
+`price_date > (select max(price_date) from {{ this }})`. Verified three ways:
+`--full-refresh` and incremental runs produce identical row counts (37,143,284);
+a re-run with no new data inserts nothing; landing 2026-09-08 added 43,030 rows
+and advanced the maximum date. The `delete+insert` strategy makes re-running a
+date idempotent rather than duplicating it.
+
+The model was deliberately left as a table until the backfill completed. An
+incremental model filtering on `max(price_date)` would have permanently skipped
+every date landing behind the running maximum.
+
 ## 007 — Sealed product is flagged at the intermediate layer, filtered at the mart
 
 **Date:** 2026-09-09
@@ -360,3 +397,41 @@ list was complete: Normal (17,357), Reverse Holofoil (13,798), Holofoil (10,766)
 1st Edition (762), Unlimited (761), 1st Edition Holofoil (183), Unlimited Holofoil
 (179). That test is now `error` rather than `warn` — a new printing type appearing
 upstream should stop the build.
+
+**Status revised 2026-09-10: deferred, not built.**
+
+The reconciliation model described above does not exist in this repository, and
+neither does the pokemontcg.io enrichment it would validate. This note records why
+it was deferred rather than leaving the entry reading as if it had been
+implemented.
+
+**What changed since the decision.** Release date was the most load-bearing reason
+for the enrichment, and 009 solved it another way — a 19-row seed at the set
+level, sourced and documented, rather than a fuzzy join across ~43,500 card
+printings. That removed the urgency without removing the case entirely: artist,
+subtypes, and format legality are still only available from pokemontcg.io, and
+they remain the most interesting unexplored explanatory variables for price.
+
+**Why it is deferred rather than dropped.** The join is the genuinely difficult
+part of this project and would take longer than everything built so far. It has to
+match on set abbreviation plus collector number across two catalogs that share no
+identifier, against a source where promos, reprints and special subsets are the
+expected failure classes. Doing it properly means the reconciliation model, a
+threshold set from a first real measurement, and manual review of the unmatched
+tail — very likely a third seed in the same pattern as the other two.
+
+Doing it badly means an inner join that silently drops the cards that fail to
+match, which would be the single worst thing in the repository: a filter that
+looks like a join, removing exactly the unusual cards most likely to be
+interesting, with no test that would catch it.
+
+**The design commitment stands.** If and when this is built, unmatched cards keep
+their TCGplayer attributes and carry null enrichment. They stay in price analysis
+and drop out only of cuts depending on an enriched field. The unmatched rate is
+reported by set and tested against a threshold. That was the right call when
+written and remains so; only the timing changed.
+
+**What this entry is now.** A specification for future work, not a description of
+the system. Anything in this decision log without a corresponding model should say
+so plainly — a log that mixes what was built with what was intended is worse than
+no log, because a reader cannot tell which is which.

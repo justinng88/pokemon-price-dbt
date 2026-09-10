@@ -54,8 +54,10 @@ backward from each row, so drawdown on a given date reflects the peak as of that
 date. Correct for time-series analysis; wrong if you want current
 distance-from-ATH, which needs a separate snapshot model.
 
-**`pct_change_7d` still uses `lag(..., 7)`** and carries the rows-versus-days flaw
-that `pct_change_1d` had. Not yet fixed. Treat it as approximate.
+**`pct_change_7d` is null where the 7-observation lag does not span exactly 7
+days.** Same gating as `pct_change_1d`, applied for the same reason. Costs 1.06%
+of rows to null versus 0.16% for the daily metric, since seven consecutive
+observations are a stricter requirement than two.
 
 **Prices are right-skewed.** Prefer median over mean for any aggregate.
 
