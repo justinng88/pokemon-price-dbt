@@ -1,72 +1,153 @@
-# Pokemon TCG price analytics
+# Pokémon TCG price analytics
 
-A dbt project that turns daily TCGplayer price snapshots into a modeled warehouse
-for analyzing card prices against card-level attributes: rarity, printing, set,
-release recency, card type, artist.
+A dbt warehouse over ~945 days of daily TCGplayer price snapshots, built to
+analyze card prices against card-level attributes: rarity, printing, set, and
+release recency.
 
-Personal, non-commercial project. Price and catalog data comes from
-[TCGCSV](https://tcgcsv.com), a public mirror of TCGplayer data. Card attribute
-enrichment comes from [pokemontcg.io](https://pokemontcg.io). Nothing here is
-affiliated with or endorsed by TCGplayer, eBay, or The Pokemon Company.
+**Stack:** dbt-core 1.12 · DuckDB · Python · ~35M price observations across
+~43,500 card printings, 2024-02-08 to present.
 
-## Grain
+---
 
-The single most important thing about this warehouse: **prices are per product per
-printing, not per card.** A card with Normal, Holofoil and Reverse Holofoil
-printings has three independent price series. The fact grain is
-`(product_id, printing_type, price_date)`. See `docs/DECISIONS.md` entry 004.
+## Finding: price decay after release scales with rarity tier
+
+Median price by days since set release, indexed to 100 at the release window.
+
+| Tier | 0–29d | 30–89d | 90–179d | 180–364d | Change |
+|---|---|---|---|---|---|
+| Chase | 100 | 83 | 64 | 61 | **−39%** |
+| Ultra | 100 | 66 | 60 | 54 | **−46%** |
+| Rare | 100 | 96 | 88 | 80 | −20% |
+| Base | 100 | 92 | 92 | 92 | −8% |
+
+*Chase = Illustration Rare, Special Illustration Rare, Secret Rare, Hyper Rare and
+similar. Base = Common and Uncommon. Excludes presale rows, cohort-ineligible
+sets, and non-tradeable products. Medians, not means — the distribution is
+severely right-skewed.*
+
+**The higher the tier, the harder the fall.** Ultra-rare cards lose about 46% of
+median value within a year of release; commons lose 8%. Most of the decline
+happens early — chase cards drop 36% in their first 90 days.
+
+**Ultra decays more than chase**, which was not the expected result. The intuition
+going in was that the scarcest cards would fall hardest as supply floods in during
+peak pack-opening. Instead, ultra-rare cards — plentiful enough to be pulled
+regularly but not scarce enough to be sought — decay furthest. Chase cards hold
+proportionally more of their release value.
+
+**Base-tier cards barely move because they cannot.** Their median sits at $0.11–
+$0.12 across every window, which is effectively TCGplayer's listing floor. There
+is no room to decay. This is a structural property of the marketplace, not a
+market observation, and it is the kind of thing an unqualified "commons are
+stable" claim would get wrong.
+
+### What this analysis does not show
+
+**Cards past 365 days are excluded from the table above, deliberately.** That
+bucket shows *higher* medians than the 180–364 bucket for every tier, which looks
+like recovery and is not. The dataset spans 2024 onward, so anything older than a
+year is disproportionately drawn from vintage sets going back to 1999 — 22,265
+base-tier printings versus roughly 4,000 in each younger bucket. It is a different
+population, not a later life stage. Reading a rebound there would be a
+composition artifact.
+
+**This is a cross-section, not a cohort.** Each bucket contains different cards,
+so the comparison assumes sets released at different times behave comparably. A
+stronger version would follow the same printings through time. That is the next
+piece of work.
+
+---
+
+## Grain: the decision everything else rests on
+
+**Prices are per product per printing, not per card.** A card issued in Normal,
+Holofoil and Reverse Holofoil has three independent price series that diverge
+substantially. The fact grain is `(product_id, printing_type, price_date)`, keyed
+by a surrogate `card_printing_key`.
+
+Aggregating to the product level would let reverse holos silently drag down every
+rarity-level average. Enforced by uniqueness tests at both staging and mart.
+
+---
+
+## Data quality work
+
+Three problems the pipeline found that a green build would not have surfaced:
+
+**Release dates were wrong for 19 of 220 sets**, carrying the catalog extract date
+instead. Every model built and every test passed while `days_since_set_release`
+computed nonsense for those sets. The fix was not to research 19 dates: eight of
+them are catch-all promo buckets that accumulate cards across decades and were
+never released at all, and nine are POP Series sets distributed over 12-month
+Organized Play windows. Cohort eligibility is about whether a release *event*
+happened, not whether a timestamp exists. Corrected via a sourced seed with a
+written reason per row.
+
+**A bounds test on daily percent change fired on 580 rows.** The cause was not bad
+data — `lag()` returns the previous *observation*, not the previous day, and
+across a gap in the backfill, cards were being compared against prices up to eight
+months old. Fixed by computing the real day interval and returning null where it
+is not 1. Residual after the fix: 58 rows across 945 days, scattered, which is the
+genuine tail of a heavy-tailed distribution.
+
+**The first explanation for that test failure was wrong.** It was attributed to
+penny-card relisting noise and a materiality floor was added on that basis.
+Re-measured against complete data, cheap cards are only about three times noisier
+than expensive ones — not the order of magnitude assumed. The original analysis
+was internally consistent and incorrect, because it was measured against a dataset
+with a known hole in it. Documented as a revision rather than an edit.
+
+Full reasoning in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+---
+
+## Sources
+
+**[TCGCSV](https://tcgcsv.com)** — public daily mirror of TCGplayer categories,
+groups, products and prices, with archives back to 2024-02-08. TCGplayer's own API
+is closed to new developers, and the mirror carries the same data with usable
+history.
+
+Personal, non-commercial project. Not affiliated with or endorsed by TCGplayer,
+eBay, or The Pokémon Company.
+
+---
 
 ## Layout
 
 ```
-extract/       Python extraction into a parquet landing zone. Idempotent.
-landing/       Gitignored. Rebuildable from extract/.
-analytics/     The dbt project.
-  models/staging/       Renaming, typing, pivoting. One model per source table.
+extract/       Idempotent Python extraction into a parquet landing zone
+landing/       Gitignored, rebuildable from extract/
+analytics/     The dbt project
+  models/staging/       Rename, type, pivot. One model per source table.
   models/intermediate/  Joins and reshaping.
-  models/marts/         Dimensions, facts, and metric tables.
-docs/          Decision log, changelog, and per-table one-pagers.
+  models/marts/         Dimensions, facts, metrics.
+  seeds/                Hand-maintained corrections, versioned in git.
+  tests/                Singular tests encoding domain expectations.
+docs/          Decision log, changelog, per-table one-pagers
+query.py       Read-only DuckDB query helper
 ```
 
 ## Setup
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && .venv\Scripts\Activate.ps1   # Windows
 pip install -r requirements.txt
+mkdir "$env:USERPROFILE\.dbt"; cp analytics\profiles.yml "$env:USERPROFILE\.dbt\"
 
-# Tell dbt where the profile lives
-export DBT_PROFILES_DIR="$(pwd)/analytics"
+python extract\fetch_tcgcsv.py catalog
+python extract\fetch_tcgcsv.py prices --start 2024-02-08 --end 2026-09-07
 
-cd analytics
-dbt deps
+cd analytics && dbt deps && dbt build
 ```
 
-## Loading data
-
-```bash
-# From the repo root, with the venv active.
-# Catalog: sets, products, and product attributes. Run monthly.
-python extract/fetch_tcgcsv.py catalog
-
-# Prices: start with a short window to get the pipeline green.
-python extract/fetch_tcgcsv.py prices --start 2026-07-10 --end 2026-09-07
-
-# Then backfill wider in the background. Archives begin 2024-02-08.
-python extract/fetch_tcgcsv.py prices --start 2024-02-08 --end 2026-07-09
-```
-
-## Running
-
-```bash
-cd analytics
-dbt build            # run + test everything
-dbt source freshness # check the mirror is still publishing
-dbt docs generate && dbt docs serve
-```
+Full instructions, troubleshooting and the build roadmap are in
+[`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## Documentation
 
-- `docs/DECISIONS.md` — why the project is built the way it is. Read this first.
-- `docs/CHANGELOG.md` — what changed each session, and what was surprising.
-- `docs/one-pagers/` — per-table reference: grain, sourcing, dimensionality,
-  limitations, retention.
+- [`docs/DECISIONS.md`](docs/DECISIONS.md) — every non-obvious choice and why
+- [`docs/CHANGELOG.md`](docs/CHANGELOG.md) — session log, including what was
+  surprising
+- [`docs/one-pagers/`](docs/one-pagers/) — per-table grain, sourcing,
+  dimensionality, limitations
